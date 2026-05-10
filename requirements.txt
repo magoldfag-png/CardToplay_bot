@@ -1,8 +1,4 @@
-# Основная библиотека для Telegram Bot API с поддержкой фоновых задач
 python-telegram-bot[job-queue]==20.7
-
-# Загрузка переменных из .env файла
 python-dotenv==1.0.0
-
-# Работа с API ЮMoney (Quickpay и проверка платежей)
 yoomoney==0.1.0
+requests
