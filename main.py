@@ -4,6 +4,7 @@ import sys
 def install_requirements():
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
 
+from handlers.promo import promo_pika
 from telegram import ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
 from config import BOT_TOKEN
@@ -47,7 +48,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("approve", approve))
     app.job_queue.run_repeating(check_payment_and_deliver, interval=30, first=10)
-
+    app.add_handler(MessageHandler(filters.Regex(r'^PIKA$'), promo_pika))
     # Кнопки главного меню (ReplyKeyboard)
     app.add_handler(MessageHandler(filters.Regex("^🆓 Ежедневный пак$"), daily_pack_button))
     app.add_handler(MessageHandler(filters.Regex("^📦 Коллекция$"), collection_button))

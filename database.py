@@ -41,6 +41,12 @@ def init_db():
                 status TEXT DEFAULT 'pending',
                 created_at TEXT
             )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS promo_usage (
+                user_id INTEGER,
+                promo_code TEXT,
+                used_at TEXT,
+                PRIMARY KEY (user_id, promo_code)
+            )''')
     # В init_db добавить:
  # Вместо простого вызова:
 # c.execute("ALTER TABLE pending_payments ADD COLUMN pack_type TEXT DEFAULT 'premium'")
@@ -181,3 +187,21 @@ def remove_one_card(user_id, card_id):
     # Возвращаем награду
     card = get_card_info(card_id)
     return SPRAY_REWARDS.get(card["rarity"], 1)
+
+def has_used_promo(user_id: int, promo_code: str) -> bool:
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT 1 FROM promo_usage WHERE user_id = ? AND promo_code = ?",
+        (user_id, promo_code)
+    ).fetchone()
+    conn.close()
+    return row is not None
+
+def use_promo(user_id: int, promo_code: str):
+    conn = get_conn()
+    conn.execute(
+        "INSERT OR IGNORE INTO promo_usage (user_id, promo_code, used_at) VALUES (?, ?, ?)",
+        (user_id, promo_code, datetime.now().isoformat())
+    )
+    conn.commit()
+    conn.close()
