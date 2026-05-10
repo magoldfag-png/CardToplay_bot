@@ -1,3 +1,9 @@
+import subprocess
+import sys
+
+def install_requirements():
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+
 from telegram import ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
 from config import BOT_TOKEN
