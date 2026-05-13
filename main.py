@@ -3,7 +3,7 @@ import sys
 
 def install_requirements():
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
-
+from handlers.admin import approve, set_artifact, reset_levels  # admin.py дополнить
 from handlers.promo import promo_pika
 from telegram import ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
@@ -19,6 +19,16 @@ from handlers.collection import (
     handle_collection_spray_all,
     collection_rarity_back,
 )
+from handlers.battle import (
+    campaign_button,
+    select_level,
+    navigate_cards,
+    toggle_card,
+    fight,
+    campaign_back
+)
+from handlers.profile import profile_command
+
 from handlers.premium import premium_button
 from handlers.admin import approve
 from handlers.craft import craft_menu, craft_card_menu, craft_card, craft_buy_pack, craft_menu_back
@@ -70,8 +80,17 @@ def main():
     app.add_handler(CallbackQueryHandler(main_menu_callback, pattern="^main_menu$"))
     app.add_handler(CallbackQueryHandler(collection_rarity_menu, pattern="^coll_rarity_"))
     app.add_handler(CallbackQueryHandler(collection_rarity_back, pattern="^coll_rarity_back$"))
-
-
+    app.add_handler(CommandHandler("approve", approve))
+    app.add_handler(CommandHandler("set_artifact", set_artifact))
+    app.add_handler(CommandHandler("reset_levels", reset_levels))
+    app.add_handler(MessageHandler(filters.Regex("^⚔️ Сюжетка$"), campaign_button))
+    app.add_handler(CallbackQueryHandler(select_level, pattern=r'^campaign_select_\d+$'))
+    app.add_handler(CallbackQueryHandler(navigate_cards, pattern=r'^battle_nav_\d+$'))
+    app.add_handler(CallbackQueryHandler(toggle_card, pattern=r'^battle_toggle_\d+$'))
+    app.add_handler(CallbackQueryHandler(fight, pattern='^battle_fight$'))
+    app.add_handler(CallbackQueryHandler(campaign_back, pattern='^battle_back$'))
+    app.add_handler(MessageHandler(filters.Regex("^👤 Профиль$"), profile_command))
+    app.add_handler(CommandHandler("profile", profile_command))
     # Заглушка для noop
     app.add_handler(CallbackQueryHandler(noop_callback, pattern="^noop$"))
 
@@ -83,10 +102,9 @@ async def main_menu_callback(update, context):
     # Удаляем клавиатуру и возвращаем к обычной клавиатуре
     await query.delete_message()
     # Отправляем короткое сообщение с главным меню
-    keyboard = [
-        ["🆓 Ежедневный пак", "📦 Коллекция", "🔨 Крафт"],
-        ["🃏 Стандартный пак", "💎 Премиум пак"]
-    ]
+    keyboard = [["🆓 Ежедневный пак", "📦 Коллекция", "🔨 Крафт"],
+            ["🃏 Стандартный пак", "💎 Премиум пак", "⚔️ Сюжетка"],
+            ["👤 Профиль"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await context.bot.send_message(chat_id=query.from_user.id, text="Барыга снова в деле. Выбирай.", reply_markup=reply_markup)
 

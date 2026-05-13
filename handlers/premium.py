@@ -25,7 +25,7 @@ async def premium_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         paymentType="SB",
         sum=99,
         label=code,
-        successURL="https://t.me/your_bot?start=success"  # замени на свой юзернейм
+        successURL="https://t.me/CardPackToPlay_bot"  # замени на свой юзернейм
     )
     payment_url = quickpay.base_url
 

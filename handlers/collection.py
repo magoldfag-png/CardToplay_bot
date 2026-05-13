@@ -1,7 +1,7 @@
 from telegram import InputMediaPhoto, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from config import SPRAY_REWARDS
-from database import (get_conn, get_user_collection, get_card_info, get_card_quantity,
+from database import (get_conn, get_user_collection, get_card_info, get_card_quantity, get_user_exp,
                       remove_one_card, add_coins)
 from image_processor import generate_card_image
 
@@ -164,8 +164,18 @@ async def handle_collection_spray(update: Update, context: ContextTypes.DEFAULT_
         return
     reward = remove_one_card(user_id, card_id)
     if reward:
-        add_coins(user_id, reward)
-        await query.answer(f"Ну, с дымком. Держи свои {reward} монет.", show_alert=True)
+
+        reward = remove_one_card(user_id, card_id)
+        if reward:
+            add_coins(user_id, reward)
+            # бонус кэшбэка
+            exp, lvl = get_user_exp(user_id)
+            if lvl >= 4:
+                add_coins(user_id, 1)
+                await query.answer(f"Ну, с дымком. Держи {reward} монет + 1 кэшбэк.")
+            else:
+                add_coins(user_id, reward)
+                await query.answer(f"Ну, с дымком. Держи свои {reward} монет.", show_alert=True)
         # Если после распыления карта кончилась совсем, убираем её из card_ids
         new_qty = get_card_quantity(user_id, card_id)
         state = collection_state.get(user_id)
@@ -181,6 +191,8 @@ async def handle_collection_spray(update: Update, context: ContextTypes.DEFAULT_
                 # корректируем индекс
                 if state["index"] >= len(state["card_ids"]):
                     state["index"] = len(state["card_ids"]) - 1
+                reward = remove_one_card(user_id, card_id)
+
             # обновляем отображение текущей карты
         await show_collection_card(query, context, user_id)
 

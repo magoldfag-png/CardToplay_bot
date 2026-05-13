@@ -4,6 +4,7 @@ from config import ADMIN_IDS, PREMIUM_RARITY_WEIGHTS
 from handlers.daily_pack import weighted_choice, user_packs, show_pack_card
 from database import add_user_card, get_card_info, get_conn
 import random
+from database import set_artifacts, reset_levels as db_reset_levels
 
 async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /approve <user_id> — только для админов."""
@@ -88,3 +89,40 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_photo(chat_id=target_id, photo=img, caption=caption, reply_markup=reply_markup)
 
     await update.message.reply_text(f"Мега-бустер для юзера {target_id} готов.")
+
+async def set_artifact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("Не дорос.")
+        return
+    try:
+        target_id = int(context.args[0])
+        qty = int(context.args[1])
+    except:
+        await update.message.reply_text("Использование: /set_artifact <user_id> <quantity>")
+        return
+    set_artifacts(target_id, qty)
+    await update.message.reply_text(f"Артефакты для {target_id} установлены в {qty}.")
+
+async def reset_levels(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("Не дорос.")
+        return
+    try:
+        target_id = int(context.args[0])
+    except:
+        await update.message.reply_text("Использование: /reset_levels <user_id>")
+        return
+    db_reset_levels(target_id)
+    await update.message.reply_text(f"Прогресс уровней для {target_id} сброшен.")
+    
+async def add_exp(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    try:
+        target_id = int(context.args[0])
+        amount = int(context.args[1])
+    except:
+        await update.message.reply_text("Используй: /add_exp <user_id> <amount>")
+        return
+    add_exp(target_id, amount)  # используем database.add_exp
+    await update.message.reply_text(f"Добавлено {amount} EXP игроку {target_id}.")

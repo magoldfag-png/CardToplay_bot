@@ -6,11 +6,9 @@ import os
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     create_user(user.id, user.username)
-
-    keyboard = [
-        ["🆓 Ежедневный пак", "📦 Коллекция", "🔨 Крафт"],
-        ["🃏 Стандартный пак", "💎 Премиум пак"]
-    ]  
+    keyboard = [["🆓 Ежедневный пак", "📦 Коллекция", "🔨 Крафт"],
+            ["🃏 Стандартный пак", "💎 Премиум пак", "⚔️ Сюжетка"],
+            ["👤 Профиль"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
     with open(os.path.join("cards", "card_0.jpg"), "rb") as photo:

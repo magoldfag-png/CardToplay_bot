@@ -8,9 +8,21 @@ from config import DAILY_RARITY_WEIGHTS, PREMIUM_RARITY_WEIGHTS
 from image_processor import generate_card_image
 from telegram import InputMediaPhoto 
 from config import DAILY_RARITY_WEIGHTS, ADMIN_IDS
-
+from utils.player_levels import get_bonuses
+from database import get_user_exp
 # Храним текущий открытый пак для навигации: user_id -> {"cards": [], "images": [], "index": 0}
 user_packs = {}
+
+def get_adjusted_weights(user_id):
+    exp, level = get_user_exp(user_id)
+    bonuses = get_bonuses(level)
+    weights = DAILY_RARITY_WEIGHTS.copy()
+    if bonuses["rare_boost"] > 0:
+        # Увеличиваем rare на boost% за счет common
+        boost = bonuses["rare_boost"]
+        weights["common"] = max(0, weights["common"] - boost)
+        weights["rare"] += boost
+    return weights
 
 def weighted_choice(weights):
     rarities = list(weights.keys())
@@ -41,7 +53,9 @@ async def daily_pack_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_data = get_user(user.id)
     now = datetime.now()
-
+    user_exp, user_level = get_user_exp(user.id)
+    cards_to_generate = 3
+    adjusted_weights = get_adjusted_weights(user.id)
     # Админам можно всегда, без ограничений по времени
     if user.id not in ADMIN_IDS:
         if user_data and user_data["last_free_pack_time"]:
@@ -63,6 +77,8 @@ async def daily_pack_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cards_info = []
     images = []
     for cid in generated_ids:
+        rarity = weighted_choice(adjusted_weights)
+
         add_user_card(user.id, cid)
         card = get_card_info(cid)
         cards_info.append(card)
