@@ -13,6 +13,7 @@ from database import get_user_exp
 # Храним текущий открытый пак для навигации: user_id -> {"cards": [], "images": [], "index": 0}
 user_packs = {}
 
+
 def get_adjusted_weights(user_id):
     exp, level = get_user_exp(user_id)
     bonuses = get_bonuses(level)
@@ -225,3 +226,49 @@ def generate_standard_cards(user_id: int) -> list[int]:
         generated_ids.append(card_id)
         add_user_card(user_id, card_id)
     return generated_ids
+
+async def display_generated_pack(user_id: int, card_ids: list[int], context: ContextTypes.DEFAULT_TYPE):
+    """Показывает открытый пак с перелистыванием для сгенерированных карт."""
+    cards_info = [get_card_info(cid) for cid in card_ids]
+    images = [generate_card_image(card) for card in cards_info]
+    for img in images:
+        img.seek(0)
+    user_packs[user_id] = {
+        "cards": cards_info,
+        "images": images,
+        "index": 0,
+        "source": "standard"   # можно заменить на "welcome_bonus"
+    }
+    await send_pack_first_card(context, user_id)
+
+async def send_pack_first_card(context, user_id):
+    """Вспомогательная функция для отправки первой карты открытого пака."""
+    pack = user_packs.get(user_id)
+    if not pack:
+        return
+    idx = pack["index"]
+    card = pack["cards"][idx]
+    img = pack["images"][idx]
+    total = len(pack["cards"])
+    img.seek(0)
+    caption = (
+        f"🃏 Глянь, чо выпало!\n"
+        f"СИЛА {card['strength']} | ВЫНОСЛИВОСТЬ {card['endurance']}\n"
+        f"Способность: {card['ability_name']}"
+    )
+    keyboard = [
+        [
+            InlineKeyboardButton("◀️", callback_data=f"nav_pack_{idx-1}"),
+            InlineKeyboardButton(f"{idx+1}/{total}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"nav_pack_{idx+1}")
+        ],
+        [
+            InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")
+        ]
+    ]
+    if idx == 0:
+        keyboard[0][0] = InlineKeyboardButton(" ", callback_data="noop")
+    if idx == total - 1:
+        keyboard[0][2] = InlineKeyboardButton(" ", callback_data="noop")
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await context.bot.send_photo(chat_id=user_id, photo=img, caption=caption, reply_markup=reply_markup)

@@ -5,7 +5,7 @@ from config import SPRAY_REWARDS
 from handlers.daily_pack import generate_daily_pack, weighted_choice, user_packs
 from image_processor import generate_card_image
 import random
-
+from handlers.daily_pack import generate_daily_pack, weighted_choice, user_packs, send_pack_first_card
 CRAFT_PRICES = {
     rarity: int(price * 1.1)
     for rarity, price in SPRAY_REWARDS.items()
@@ -110,37 +110,7 @@ async def craft_buy_pack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Отправляем первую карту пака с интерфейсом
     await send_pack_first_card(context, user_id)
 
-async def send_pack_first_card(context, user_id):
-    """Вспомогательная функция для отправки первой карты открытого пака."""
-    pack = user_packs.get(user_id)
-    if not pack:
-        return
-    idx = pack["index"]
-    card = pack["cards"][idx]
-    img = pack["images"][idx]
-    total = len(pack["cards"])
-    img.seek(0)
-    caption = (
-        f"🃏 Глянь, чо выпало!\n"
-        f"СИЛА {card['strength']} | ВЫНОСЛИВОСТЬ {card['endurance']}\n"
-        f"Способность: {card['ability_name']}"
-    )
-    keyboard = [
-        [
-            InlineKeyboardButton("◀️", callback_data=f"nav_pack_{idx-1}"),
-            InlineKeyboardButton(f"{idx+1}/{total}", callback_data="noop"),
-            InlineKeyboardButton("▶️", callback_data=f"nav_pack_{idx+1}")
-        ],
-        [
-            InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")
-        ]
-    ]
-    if idx == 0:
-        keyboard[0][0] = InlineKeyboardButton(" ", callback_data="noop")
-    if idx == total - 1:
-        keyboard[0][2] = InlineKeyboardButton(" ", callback_data="noop")
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await context.bot.send_photo(chat_id=user_id, photo=img, caption=caption, reply_markup=reply_markup)
+
 
 async def craft_menu_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Возврат в главное меню крафта."""

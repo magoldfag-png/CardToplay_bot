@@ -160,7 +160,7 @@ def mark_payment_done(payment_label):
     conn.close()
 
 def sync_cards_from_json():
-    """Обновляет карты в базе данных значениями из cards.json, не трогая пользователей."""
+    """Обновляет и добавляет карты из cards.json, не трогая пользователей."""
     import os
     if not os.path.exists(CARDS_JSON):
         print("cards.json не найден, синхронизация пропущена")
@@ -170,19 +170,29 @@ def sync_cards_from_json():
     conn = get_conn()
     c = conn.cursor()
     for card in cards_data:
-        # Пропускаем Барыгу, если он есть в JSON
         if card["id"] == 99:
             continue
-        c.execute('''UPDATE cards SET 
-                     name = ?, rarity = ?, strength = ?, endurance = ?,
-                     ability_name = ?, ability_description = ?
-                     WHERE id = ?''',
-                  (card["name"], card["rarity"], card["strength"], card["endurance"],
-                   card.get("ability_name", ""), card.get("ability_description", ""),
-                   card["id"]))
+        # Проверяем, есть ли карта в базе
+        existing = c.execute("SELECT id FROM cards WHERE id = ?", (card["id"],)).fetchone()
+        if existing:
+            # Обновляем существующую
+            c.execute('''UPDATE cards SET 
+                         name = ?, rarity = ?, strength = ?, endurance = ?,
+                         ability_name = ?, ability_description = ?
+                         WHERE id = ?''',
+                      (card["name"], card["rarity"], card["strength"], card["endurance"],
+                       card.get("ability_name", ""), card.get("ability_description", ""),
+                       card["id"]))
+        else:
+            # Добавляем новую
+            c.execute('''INSERT INTO cards (id, name, rarity, strength, endurance, ability_name, ability_description)
+                         VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                      (card["id"], card["name"], card["rarity"],
+                       card["strength"], card["endurance"],
+                       card.get("ability_name", ""), card.get("ability_description", "")))
     conn.commit()
     conn.close()
-    print("Редкости карт синхронизированы с cards.json")
+    print("Синхронизация карт завершена.")
 
 def get_user(user_id):
     conn = get_conn()

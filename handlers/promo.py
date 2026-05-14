@@ -3,7 +3,7 @@ from telegram.ext import ContextTypes
 from database import has_used_promo, use_promo, add_user_card, get_card_info
 from handlers.daily_pack import generate_premium_cards, user_packs
 from image_processor import generate_card_image
-from handlers.craft import send_pack_first_card
+from handlers.daily_pack import send_pack_first_card
 
 async def promo_pika(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user

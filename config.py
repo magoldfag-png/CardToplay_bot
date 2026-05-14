@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = "8622336565:AAHiqfjeV4Tjr3dPgvoYHz4VzcgB2JM6d-w"
 admin_ids_str = os.getenv("1279277410", "")
 ADMIN_IDS = [int(x.strip()) for x in admin_ids_str.split(",") if x.strip()] if admin_ids_str else []
 

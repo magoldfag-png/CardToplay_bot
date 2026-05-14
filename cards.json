@@ -178,5 +178,68 @@
     "endurance": 5,
     "ability_name": "Кибер-бан",
     "ability_description": "Отправте карту противника в сброс на 1 ход и получите 1 урон."
+  },
+  {
+    "id": 21,
+    "name": "Рыжая ученица на остановке",
+    "rarity": "common",
+    "strength": 3,
+    "endurance": 6,
+    "ability_name": "Очаровывает карту соперника.",
+    "ability_description": ""
+  },
+  {
+    "id": 22,
+    "name": "Хозяйка положения",
+    "rarity": "rare",
+    "strength": 6,
+    "endurance": 4,
+    "ability_name": "Полное унижение",
+    "ability_description": "Заставляет карту соперника пропустить ход."
+  },
+  {
+    "id": 23,
+    "name": "Золотые подружки",
+    "rarity": "legendary",
+    "strength": 3,
+    "endurance": 8,
+    "ability_name": "Сользкие ручки",
+    "ability_description": "Существа, атаковавшие эту карту, получают -2 к силе и выносливости."
+  },
+  {
+    "id": 24,
+    "name": "Розовая мечта",
+    "rarity": "mythic",
+    "strength": 4,
+    "endurance": 6,
+    "ability_name": "Глуюокий сон",
+    "ability_description": "Востанавливает 3 здоровья."
+  },
+  {
+    "id": 25,
+    "name": "Медсестра",
+    "rarity": "epic",
+    "strength": 4,
+    "endurance": 6,
+    "ability_name": "Осмотр простаты",
+    "ability_description": "Увеличивает силу союзника на 2."
+  },
+  {
+    "id": 26,
+    "name": "Плохая девочка",
+    "rarity": "common",
+    "strength": 1,
+    "endurance": 5,
+    "ability_name": "Проблема",
+    "ability_description": "За любую проблему."
+  },
+  {
+    "id": 27,
+    "name": "Сутенер без меха",
+    "rarity": "rare",
+    "strength": 3,
+    "endurance": 6,
+    "ability_name": "Домашний вызов",
+    "ability_description": "Отнимает карту противника."
   }
 ]

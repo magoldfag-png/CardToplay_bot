@@ -1,9 +1,9 @@
+#version 2.0
 import subprocess
 import sys
 
 def install_requirements():
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
-from handlers.admin import approve, set_artifact, reset_levels  # admin.py дополнить
 from handlers.promo import promo_pika
 from telegram import ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
@@ -28,7 +28,7 @@ from handlers.battle import (
     campaign_back
 )
 from handlers.profile import profile_command
-
+from handlers.start import start, open_welcome_pack
 from handlers.premium import premium_button
 from handlers.admin import approve
 from handlers.craft import craft_menu, craft_card_menu, craft_card, craft_buy_pack, craft_menu_back
@@ -38,6 +38,7 @@ from telegram.error import NetworkError, TelegramError
 from database import sync_cards_from_json
 from handlers.premium import check_payment_and_deliver
 from handlers.premium import premium_button, standard_pack_button
+from handlers.admin import approve, force_welcome, reset_welcome, set_artifact, reset_levels  # admin.py дополнить
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -66,7 +67,7 @@ def main():
     app.add_handler(MessageHandler(filters.Regex("^🔨 Крафт$"), craft_menu))
     app.add_handler(MessageHandler(filters.Regex("^💎 Премиум пак$"), premium_button))
     app.add_handler(MessageHandler(filters.Regex("^🃏 Стандартный пак$"), standard_pack_button))
-
+    app.add_handler(CallbackQueryHandler(open_welcome_pack, pattern="^open_welcome_pack$"))
     # Callback-запросы крафта (важен порядок)
     app.add_handler(CallbackQueryHandler(craft_card_menu, pattern="^craft_card_menu$"))
     app.add_handler(CallbackQueryHandler(craft_card, pattern="^craft_(common|rare|epic|legendary|mythic)$"))    
@@ -91,6 +92,8 @@ def main():
     app.add_handler(CallbackQueryHandler(campaign_back, pattern='^battle_back$'))
     app.add_handler(MessageHandler(filters.Regex("^👤 Профиль$"), profile_command))
     app.add_handler(CommandHandler("profile", profile_command))
+    app.add_handler(CommandHandler("reset_welcome", reset_welcome))
+    app.add_handler(CommandHandler("force_welcome", force_welcome))
     # Заглушка для noop
     app.add_handler(CallbackQueryHandler(noop_callback, pattern="^noop$"))
 

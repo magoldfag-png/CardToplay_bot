@@ -1,7 +1,7 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 from config import ADMIN_IDS, PREMIUM_RARITY_WEIGHTS
-from handlers.daily_pack import weighted_choice, user_packs, show_pack_card
+from handlers.daily_pack import generate_standard_cards, weighted_choice, user_packs, show_pack_card
 from database import add_user_card, get_card_info, get_conn
 import random
 from database import set_artifacts, reset_levels as db_reset_levels
@@ -126,3 +126,30 @@ async def add_exp(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     add_exp(target_id, amount)  # используем database.add_exp
     await update.message.reply_text(f"Добавлено {amount} EXP игроку {target_id}.")
+
+
+async def reset_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    try:
+        target_id = int(context.args[0]) if context.args else update.effective_user.id
+    except:
+        await update.message.reply_text("Используй: /reset_welcome <user_id>")
+        return
+    conn = get_conn()
+    conn.execute("DELETE FROM promo_usage WHERE user_id = ? AND promo_code = 'WELCOME'", (target_id,))
+    conn.commit()
+    conn.close()
+    await update.message.reply_text(f"Промокод WELCOME для {target_id} сброшен. Теперь при /start ему снова перепадёт.")
+
+async def force_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    try:
+        target_id = int(context.args[0]) if context.args else update.effective_user.id
+    except:
+        await update.message.reply_text("Используй: /force_welcome <user_id>")
+        return
+    generate_standard_cards(target_id)   # 5 случайных карт
+    add_user_card(target_id, 16)         # легендарка "Алхимический Сосуд"
+    await update.message.reply_text(f"Стандартный пак и легендарка выданы {target_id} (без записи промокода).")
