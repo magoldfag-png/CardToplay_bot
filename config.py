@@ -4,8 +4,8 @@ from dotenv import load_dotenv
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
-BOT_TOKEN = "8713574808:AAFAubpsose9OpnjD2HJ-UlF2oW5jugIcNk" #test
-#BOT_TOKEN = "8622336565:AAHiqfjeV4Tjr3dPgvoYHz4VzcgB2JM6d-w" # original
+#BOT_TOKEN = "8713574808:AAFAubpsose9OpnjD2HJ-UlF2oW5jugIcNk" #test
+BOT_TOKEN = "8622336565:AAHiqfjeV4Tjr3dPgvoYHz4VzcgB2JM6d-w" # original
 admin_ids_str = os.getenv("1279277410", "")
 ADMIN_IDS =1279277410,471158717
 
