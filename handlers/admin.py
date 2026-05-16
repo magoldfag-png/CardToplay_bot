@@ -153,3 +153,23 @@ async def force_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     generate_standard_cards(target_id)   # 5 случайных карт
     add_user_card(target_id, 16)         # легендарка "Алхимический Сосуд"
     await update.message.reply_text(f"Стандартный пак и легендарка выданы {target_id} (без записи промокода).")
+
+async def init_products(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    conn = get_conn()
+    c = conn.cursor()
+    # Очистим и вставим заново (можно заменить на INSERT OR REPLACE, если хочешь сохранять)
+    c.execute("DELETE FROM products")
+    products_data = [
+        ("premium_1", "Мега-Бустер (1 пак)", 99, "premium", 1, "5 карт, минимум 1 редкая, повышенные шансы"),
+        ("premium_5", "Мега-Бустер x5", 349, "premium", 5, "5 паков Мега-Бустер по цене 4 (скидка 30%)"),
+        ("premium_10", "Мега-Бустер x10", 699, "premium", 10, "10 паков Мега-Бустер по цене 7 (скидка 30%)"),
+        ("standard_1", "Стандартный пак (1 пак)", 49, "standard", 1, "5 карт, обычные шансы"),
+        ("standard_5", "Стандартный пак x5", 179, "standard", 5, "5 паков по цене 4 (скидка 25%)"),
+        ("standard_10", "Стандартный пак x10", 299, "standard", 10, "10 паков по цене 6 (скидка 40%)")
+    ]
+    c.executemany("INSERT INTO products (id, name, price, pack_type, pack_count, description) VALUES (?,?,?,?,?,?)", products_data)
+    conn.commit()
+    conn.close()
+    await update.message.reply_text("Таблица продуктов заполнена.")

@@ -19,6 +19,11 @@ from handlers.collection import (
     handle_collection_spray_all,
     collection_rarity_back,
 )
+from handlers.shop import shop_menu, show_product, buy_product, shop_back
+from handlers.raid import (
+    raid_button, raid_cancel_intro, raid_confirm_intro, raid_sel_nav, raid_sel_toggle, raid_start,
+    raid_fight, raid_retreat, raid_cancel
+)
 from handlers.battle import (
     campaign_button,
     select_level,
@@ -27,46 +32,69 @@ from handlers.battle import (
     fight,
     campaign_back
 )
+from telegram.ext import TypeHandler
+from telegram import Update
+from database import update_activity
 from handlers.profile import profile_command
 from handlers.start import start, open_welcome_pack
-from handlers.premium import premium_button
-from handlers.admin import approve
+from handlers.admin import approve, init_products
 from handlers.craft import craft_menu, craft_card_menu, craft_card, craft_buy_pack, craft_menu_back
 import logging
 from telegram.ext import Application
 from telegram.error import NetworkError, TelegramError
 from database import sync_cards_from_json
 from handlers.premium import check_payment_and_deliver
-from handlers.premium import premium_button, standard_pack_button
 from handlers.admin import approve, force_welcome, reset_welcome, set_artifact, reset_levels  # admin.py дополнить
+from handlers.reminders import send_reminders, reminder_daily_pack
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+from telegram.error import BadRequest, NetworkError, TelegramError
+import logging
+
+
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if isinstance(context.error, NetworkError):
-        logger.warning(f"Сетевая ошибка: {context.error}")
-    elif isinstance(context.error, TelegramError):
-        logger.error(f"Ошибка Telegram: {context.error}")
+    err = context.error
+    if isinstance(err, BadRequest):
+        logger.error(f"Некорректный запрос: {err}")
+        # Дополнительно можно вывести update, чтобы понять, где случилось
+        logger.error(f"Update: {update}")
+    elif isinstance(err, NetworkError):
+        logger.warning(f"Сетевая ошибка: {err}")
+    elif isinstance(err, TelegramError):
+        logger.error(f"Ошибка Telegram: {err}")
     else:
-        logger.error(f"Неизвестная ошибка: {context.error}", exc_info=context.error)
+        logger.error(f"Неизвестная ошибка: {err}", exc_info=err)
+
+
 def main():
     init_db()
     sync_cards_from_json()
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_error_handler(error_handler)
+    async def activity_updater(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        if user:
+            update_activity(user.id)
+
+    app.add_handler(TypeHandler(Update, activity_updater), group=-1)
+
     # Команды
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("approve", approve))
     app.job_queue.run_repeating(check_payment_and_deliver, interval=30, first=10)
     app.add_handler(MessageHandler(filters.Regex(r'^PIKA$'), promo_pika))
+    app.job_queue.run_repeating(send_reminders, interval=3600, first=10)  # каждый час
+    app.add_handler(CallbackQueryHandler(reminder_daily_pack, pattern='^daily_pack_reminder$'))
+    app.add_handler(MessageHandler(filters.Regex("^💎 Премиум пак$"), shop_menu))
+    app.add_handler(CallbackQueryHandler(show_product, pattern='^shop_product_'))
+    app.add_handler(CallbackQueryHandler(buy_product, pattern='^shop_buy_'))
+    app.add_handler(CallbackQueryHandler(shop_back, pattern='^shop_back$'))
     # Кнопки главного меню (ReplyKeyboard)
     app.add_handler(MessageHandler(filters.Regex("^🆓 Ежедневный пак$"), daily_pack_button))
     app.add_handler(MessageHandler(filters.Regex("^📦 Коллекция$"), collection_button))
-    app.add_handler(MessageHandler(filters.Regex("^💎 Премиум пак$"), premium_button))
     app.add_handler(MessageHandler(filters.Regex("^🔨 Крафт$"), craft_menu))
-    app.add_handler(MessageHandler(filters.Regex("^💎 Премиум пак$"), premium_button))
-    app.add_handler(MessageHandler(filters.Regex("^🃏 Стандартный пак$"), standard_pack_button))
     app.add_handler(CallbackQueryHandler(open_welcome_pack, pattern="^open_welcome_pack$"))
     # Callback-запросы крафта (важен порядок)
     app.add_handler(CallbackQueryHandler(craft_card_menu, pattern="^craft_card_menu$"))
@@ -74,13 +102,15 @@ def main():
     app.add_handler(CallbackQueryHandler(craft_buy_pack, pattern="^craft_buy_pack$"))
     app.add_handler(CallbackQueryHandler(craft_menu_back, pattern="^craft_menu_back$"))
     # Callback-запросы
+    app.add_handler(CommandHandler("init_products", init_products))
+    app.add_handler(CallbackQueryHandler(collection_rarity_back, pattern="^coll_rarity_back$"))
+
     app.add_handler(CallbackQueryHandler(handle_pack_navigation, pattern="^nav_pack_"))
     app.add_handler(CallbackQueryHandler(handle_collection_navigation, pattern="^coll_nav_"))
     app.add_handler(CallbackQueryHandler(handle_collection_spray_all, pattern="^coll_sprayall_"))
     app.add_handler(CallbackQueryHandler(handle_collection_spray, pattern="^coll_spray_(?!all)"))
     app.add_handler(CallbackQueryHandler(main_menu_callback, pattern="^main_menu$"))
     app.add_handler(CallbackQueryHandler(collection_rarity_menu, pattern="^coll_rarity_"))
-    app.add_handler(CallbackQueryHandler(collection_rarity_back, pattern="^coll_rarity_back$"))
     app.add_handler(CommandHandler("approve", approve))
     app.add_handler(CommandHandler("set_artifact", set_artifact))
     app.add_handler(CommandHandler("reset_levels", reset_levels))
@@ -94,6 +124,15 @@ def main():
     app.add_handler(CommandHandler("profile", profile_command))
     app.add_handler(CommandHandler("reset_welcome", reset_welcome))
     app.add_handler(CommandHandler("force_welcome", force_welcome))
+    app.add_handler(MessageHandler(filters.Regex("^🌪️ Облава$"), raid_button))
+    app.add_handler(CallbackQueryHandler(raid_sel_nav, pattern=r'^raid_sel_nav_\d+$'))
+    app.add_handler(CallbackQueryHandler(raid_sel_toggle, pattern=r'^raid_sel_toggle_\d+$'))
+    app.add_handler(CallbackQueryHandler(raid_start, pattern='^raid_start$'))
+    app.add_handler(CallbackQueryHandler(raid_fight, pattern='^raid_fight$'))
+    app.add_handler(CallbackQueryHandler(raid_retreat, pattern='^raid_retreat$'))
+    app.add_handler(CallbackQueryHandler(raid_cancel, pattern='^raid_cancel$'))
+    app.add_handler(CallbackQueryHandler(raid_confirm_intro, pattern='^raid_confirm_intro$'))
+    app.add_handler(CallbackQueryHandler(raid_cancel_intro, pattern='^raid_cancel_intro$'))
     # Заглушка для noop
     app.add_handler(CallbackQueryHandler(noop_callback, pattern="^noop$"))
 
@@ -105,9 +144,11 @@ async def main_menu_callback(update, context):
     # Удаляем клавиатуру и возвращаем к обычной клавиатуре
     await query.delete_message()
     # Отправляем короткое сообщение с главным меню
-    keyboard = [["🆓 Ежедневный пак", "📦 Коллекция", "🔨 Крафт"],
-            ["🃏 Стандартный пак", "💎 Премиум пак", "⚔️ Сюжетка"],
-            ["👤 Профиль"]]
+    keyboard = [
+        ["🆓 Ежедневный пак", "📦 Коллекция", "🔨 Крафт"],
+        ["💎 Премиум пак", "⚔️ Сюжетка"],
+        ["👤 Профиль", "🌪️ Облава"]
+    ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await context.bot.send_message(chat_id=query.from_user.id, text="Барыга снова в деле. Выбирай.", reply_markup=reply_markup)
 

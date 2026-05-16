@@ -1,87 +1,108 @@
-# handlers/premium.py
-import asyncio
-
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
-from yoomoney import Quickpay
-from config import YOO_MONEY_WALLET, STANDARD_PACK_PRICE
-from database import add_pending_payment, add_user_card, get_card_info, get_pending_payments, mark_payment_done, add_pending_payment
-from handlers.daily_pack import generate_premium_cards, generate_standard_cards, user_packs
-from image_processor import generate_card_image
-from handlers.daily_pack import send_pack_first_card
-import datetime
 import logging
-from yoomoney import Client
-import time
+import datetime
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+from yoomoney import Client, Quickpay
+from config import (
+    YOO_MONEY_TOKEN,
+    YOO_MONEY_WALLET,
+    DISCOUNT_PREMIUM_PRICE,
+    DISCOUNT_STANDARD_PRICE,
+)
+from database import (
+    get_pending_payments,
+    add_pending_payment,
+    mark_payment_done,
+    get_user_exp,
+    get_card_info,
+    add_user_card,
+    get_pending_old_payments,
+    expire_payment,
+)
+from handlers.daily_pack import (
+    generate_premium_cards,
+    generate_standard_cards,
+    user_packs,
+)
+from image_processor import generate_card_image
+from handlers.craft import send_pack_first_card
 
 logger = logging.getLogger(__name__)
 
-
 MAX_RETRIES = 3
-RETRY_DELAY = 5  # секунд между попытками
-
-async def premium_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик кнопки '💎 Премиум пак'."""
-    user = update.effective_user
-    code = f"premium_{user.id}_{int(datetime.datetime.now().timestamp())}"
-    add_pending_payment(user.id, code, pack_type="premium")
-
-    quickpay = Quickpay(
-        receiver=4100119527268522,
-        quickpay_form="shop",
-        targets="Мега-Бустер (99₽)",
-        paymentType="SB",
-        sum=99,
-        label=code,
-        successURL="https://t.me/CardPackToPlay_bot"  # замени на свой юзернейм
-    )
-    payment_url = quickpay.base_url
-
-    keyboard = [[InlineKeyboardButton("💳 Перейти к оплате", url=payment_url)]]
-    await update.message.reply_text(
-        "💰 Мега-Бустер за 99₽ с повышенными шансами на ЛЕГЕНДАРНУЮ карту. После оплаты покажу твои 5 карт.",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-async def standard_pack_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик кнопки '🃏 Стандартный пак'."""
-    user = update.effective_user
-    code = f"standard_{user.id}_{int(datetime.datetime.now().timestamp())}"
-    add_pending_payment(user.id, code, pack_type="standard")
-
-    quickpay = Quickpay(
-        receiver=4100119527268522,
-        quickpay_form="shop",
-        targets=f"Стандартный пак ({STANDARD_PACK_PRICE}₽)",
-        paymentType="SB",
-        sum=STANDARD_PACK_PRICE,
-        label=code,
-        successURL="https://t.me/CardPackToPlay_bot"
-    )
-    payment_url = quickpay.base_url
-
-    keyboard = [[InlineKeyboardButton("💳 Перейти к оплате", url=payment_url)]]
-    await update.message.reply_text(
-        f"🃏 Стандартный пак за {STANDARD_PACK_PRICE}₽ с обычнами шансами. После оплаты покажу твои 5 карт.",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+RETRY_DELAY = 5  # секунд между попытками при ошибке сети
 
 async def check_payment_and_deliver(context: ContextTypes.DEFAULT_TYPE):
+    """Фоновый таск: проверка оплаченных счетов и напоминание о неоплаченных (со скидкой)."""
+        # 1. Обработка просроченных платежей (скидка) с ограничениями
+    from config import DISCOUNT_START_HOUR, DISCOUNT_END_HOUR
+    from database import get_last_discount_time, set_last_discount_time
+
+    now = datetime.datetime.now()
+    if DISCOUNT_START_HOUR <= now.hour < DISCOUNT_END_HOUR:
+        old_payments = get_pending_old_payments(minutes=15)
+        for old_pay in old_payments:
+            user_id = old_pay["user_id"]
+            # Проверяем, можно ли отправить скидку этому пользователю
+            last_time = get_last_discount_time(user_id)
+            if last_time:
+                try:
+                    last_dt = datetime.datetime.fromisoformat(last_time)
+                    if (now - last_dt) < datetime.timedelta(hours=24):
+                        continue  # недостаточно времени с последней скидки
+                except ValueError:
+                    pass  # если дата битая, разрешаем
+
+            original_label = old_pay["payment_label"]
+            pack_type = old_pay["pack_type"]
+            discount_price = DISCOUNT_PREMIUM_PRICE if pack_type == "premium" else DISCOUNT_STANDARD_PRICE
+
+            new_label = f"discount_{user_id}_{int(datetime.datetime.now().timestamp())}"
+            quickpay = Quickpay(
+                receiver=YOO_MONEY_WALLET,
+                quickpay_form="shop",
+                targets=f"Скидочный пак ({discount_price}₽)",
+                paymentType="SB",
+                sum=discount_price,
+                label=new_label,
+                successURL="https://t.me/your_bot?start=success"
+            )
+            payment_url = quickpay.base_url
+
+            add_pending_payment(user_id, new_label, pack_type=pack_type, is_discount=1)
+            expire_payment(original_label)
+
+            try:
+                await context.bot.send_message(
+                    user_id,
+                    f"⏳ Похоже, ты забыл про свой заказ, малой. Держи персональную скидку 20% на 24 часа!\n"
+                    f"Новая цена: {discount_price}₽ вместо {99 if pack_type=='premium' else 49}₽.\n"
+                    f"Ссылка действительна сутки."
+                )
+                await context.bot.send_message(
+                    user_id,
+                    f"Оплати сейчас: {payment_url}"
+                )
+                set_last_discount_time(user_id, now.isoformat())
+            except Exception as e:
+                logger.error(f"Ошибка отправки скидки пользователю {user_id}: {e}")
+    # 2. Проверка успешных платежей
     payments = get_pending_payments()
     if not payments:
         return
 
-    # Создаём клиента один раз (он потокобезопасен для чтения)
-    client = Client(4100119527268522)
+    client = Client(YOO_MONEY_TOKEN)
 
     for pay in payments:
         user_id = pay["user_id"]
         label = pay["payment_label"]
         pack_type = pay["pack_type"] if "pack_type" in pay.keys() else "premium"
+        pack_count = pay["pack_count"] if "pack_count" in pay.keys() else 1
 
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                # Запускаем синхронный запрос в отдельном потоке, чтобы не блокировать event loop
+                # Запрос истории операций по метке (асинхронно в потоке)
+                import asyncio
                 loop = asyncio.get_running_loop()
                 history = await loop.run_in_executor(
                     None,
@@ -89,16 +110,21 @@ async def check_payment_and_deliver(context: ContextTypes.DEFAULT_TYPE):
                 )
                 for op in history.operations:
                     if op.status == 'success':
-                        # Выдача бустера
-                        if pack_type == "standard":
-                            card_ids = generate_standard_cards(user_id)
-                        else:
-                            card_ids = generate_premium_cards(user_id)
+                        # Выдача паков
+                        first_pack_cards = []
+                        all_cards = []
 
-                        for cid in card_ids:
-                            add_user_card(user_id, cid)
+                        for i in range(pack_count):
+                            if pack_type == "standard":
+                                new_cards = generate_standard_cards(user_id)
+                            else:
+                                new_cards = generate_premium_cards(user_id)
+                            all_cards.extend(new_cards)
+                            if i == 0:
+                                first_pack_cards = new_cards
 
-                        cards_info = [get_card_info(cid) for cid in card_ids]
+                        # Подготовка отображения первого пака
+                        cards_info = [get_card_info(cid) for cid in first_pack_cards]
                         images = [generate_card_image(card) for card in cards_info]
                         for img in images:
                             img.seek(0)
@@ -107,17 +133,24 @@ async def check_payment_and_deliver(context: ContextTypes.DEFAULT_TYPE):
                             "cards": cards_info,
                             "images": images,
                             "index": 0,
-                            "source": pack_type
+                            "source": f"{pack_type}_pack"
                         }
 
                         mark_payment_done(label)
                         await send_pack_first_card(context, user_id)
-                        logger.info(f"{pack_type} пакет выдан пользователю {user_id} после {attempt} попытки")
-                        return  # успешно обработали
-                break  # нет успешных операций – выходим из цикла попыток
+
+                        if pack_count > 1:
+                            await context.bot.send_message(
+                                user_id,
+                                f"🎁 Всего ты получил {pack_count} паков! Остальные карты уже в коллекции, смотри."
+                            )
+
+                        logger.info(f"{pack_type} пак(ы) x{pack_count} выданы пользователю {user_id} после {attempt} попытки")
+                        return  # успешно обработали платёж
+                break  # если нет успешных операций, выходим из цикла попыток
             except Exception as e:
                 logger.warning(f"Попытка {attempt}/{MAX_RETRIES} для {label} провалилась: {e}")
                 if attempt < MAX_RETRIES:
-                    await asyncio.sleep(RETRY_DELAY)  # асинхронная задержка
+                    await asyncio.sleep(RETRY_DELAY)
                 else:
                     logger.error(f"Исчерпаны попытки для {label}, платёж пока не обработан")

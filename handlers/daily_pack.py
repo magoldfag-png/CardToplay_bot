@@ -185,7 +185,7 @@ async def handle_spray_from_pack(update, context):
         if pack:
             await show_pack_card(update, context, user_id, edit=True)
 
-def generate_premium_cards():
+def generate_premium_cards(user_id: int):
     """Генерирует 5 карт: гарантировано минимум 1 редкая."""
     cards_generated = []
     rare_ids = [row["id"] for row in get_conn().execute("SELECT id FROM cards WHERE rarity = 'rare' AND id != 99").fetchall()]
@@ -200,15 +200,13 @@ def generate_premium_cards():
         if not possible:
             possible = [row["id"] for row in get_conn().execute("SELECT id FROM cards WHERE rarity = 'common' AND id != 99").fetchall()]
         cards_generated.append(random.choice(possible))
+    for cid in cards_generated:
+        add_user_card(user_id, cid)
     return cards_generated
-
 # handlers/daily_pack.py
 
-def generate_standard_cards(user_id: int) -> list[int]:
-    """
-    Генерирует 5 случайных карт с обычными шансами (как ежедневный, но без лимита)
-    и добавляет их пользователю. Возвращает список card_id.
-    """
+def generate_standard_cards(user_id: int):
+    """Генерирует 5 случайных карт с обычными шансами (как ежедневный пак, но 5 штук)."""
     generated_ids = []
     for _ in range(5):
         rarity = weighted_choice(DAILY_RARITY_WEIGHTS)
@@ -218,7 +216,6 @@ def generate_standard_cards(user_id: int) -> list[int]:
         if possible:
             card_id = random.choice(possible)["id"]
         else:
-            # fallback: common
             conn = get_conn()
             possible = conn.execute("SELECT id FROM cards WHERE rarity = 'common' AND id != 99").fetchall()
             conn.close()

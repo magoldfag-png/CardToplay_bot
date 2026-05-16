@@ -1,6 +1,6 @@
 import sqlite3
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from config import DB_PATH, CARDS_JSON, SPRAY_REWARDS
 
 def get_conn():
@@ -28,12 +28,30 @@ def init_db():
                     last_free_pack_time TEXT,
                     coins INTEGER DEFAULT 0
                 )''')
+    # database.py внутри init_db
+
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN last_activity_time TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN last_reminder_24_sent TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN last_reminder_48_sent TEXT")
+    except sqlite3.OperationalError:
+        pass
     c.execute('''CREATE TABLE IF NOT EXISTS user_cards (
                     user_id INTEGER,
                     card_id INTEGER,
                     quantity INTEGER DEFAULT 1,
                     PRIMARY KEY (user_id, card_id)
                 )''')
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN last_discount_time TEXT")
+    except sqlite3.OperationalError:
+        pass
     c.execute('''CREATE TABLE IF NOT EXISTS pending_payments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
@@ -41,6 +59,22 @@ def init_db():
                 status TEXT DEFAULT 'pending',
                 created_at TEXT
             )''')
+    try:
+        c.execute("ALTER TABLE pending_payments ADD COLUMN pack_count INTEGER DEFAULT 1")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute("ALTER TABLE pending_payments ADD COLUMN discount_sent INTEGER DEFAULT 0")
+    except:
+        pass
+    try:
+        c.execute("ALTER TABLE pending_payments ADD COLUMN is_discount INTEGER DEFAULT 0")
+    except:
+        pass
+    try:
+        c.execute("ALTER TABLE pending_payments ADD COLUMN original_pack_type TEXT")
+    except:
+        pass
     c.execute('''CREATE TABLE IF NOT EXISTS promo_usage (
                 user_id INTEGER,
                 promo_code TEXT,
@@ -75,6 +109,59 @@ def init_db():
                     user_id INTEGER PRIMARY KEY,
                     quantity INTEGER DEFAULT 0
                 )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS enemies (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL
+            )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS raid_trophies (
+                user_id INTEGER PRIMARY KEY,
+                quantity INTEGER DEFAULT 0
+            )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS products (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                price INTEGER NOT NULL,
+                pack_type TEXT NOT NULL,
+                pack_count INTEGER NOT NULL DEFAULT 1,
+                description TEXT
+            )''')
+
+    c.execute("SELECT COUNT(*) FROM products")
+    if c.fetchone()[0] == 0:
+        products_data = [
+            ("premium_1", "Мега-Бустер (1 пак)", 99, "premium", 1, "5 карт, минимум 1 редкая, повышенные шансы"),
+            ("premium_5", "Мега-Бустер x5", 349, "premium", 5, "5 паков Мега-Бустер по цене 4 (скидка 30%)"),
+            ("premium_10", "Мега-Бустер x10", 699, "premium", 10, "10 паков Мега-Бустер по цене 7 (скидка 30%)"),
+            ("standard_1", "Стандартный пак (1 пак)", 49, "standard", 1, "5 карт, обычные шансы"),
+            ("standard_5", "Стандартный пак x5", 179, "standard", 5, "5 паков по цене 4 (скидка 25%)"),
+            ("standard_10", "Стандартный пак x10", 299, "standard", 10, "10 паков по цене 6 (скидка 40%)")
+        ]
+        c.executemany("INSERT INTO products (id, name, price, pack_type, pack_count, description) VALUES (?,?,?,?,?,?)", products_data)
+    c.execute("SELECT COUNT(*) FROM enemies")
+    if c.fetchone()[0] == 0:
+        enemies_data = [
+            (1, "Гопник с района"),
+            (2, "Коллектор в кожаном плаще"),
+            (3, "Старший по подъезду"),
+            (4, "Налоговая инспекторша"),
+            (5, "Братва из девяностых"),
+            (6, "Бывший одноклассник-бандит"),
+            (7, "Кредитный мошенник"),
+            (8, "Торгаш с рынка"),
+            (9, "Сосед-стукач"),
+            (10, "Пьяный бармен")
+        ]
+        c.executemany("INSERT INTO enemies (id, name) VALUES (?, ?)", enemies_data)
+
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN raid_attempts INTEGER DEFAULT 3")
+    except:
+        pass
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN last_raid_date TEXT DEFAULT ''")
+    except:
+        pass
     c.execute("SELECT COUNT(*) FROM levels")
     if c.fetchone()[0] == 0:
         # Если таблица пуста – просто вставляем
@@ -146,13 +233,15 @@ def get_pending_payments():
     conn.close()
     return rows
 
-def add_pending_payment(user_id, label, pack_type="premium"):
+def add_pending_payment(user_id, label, pack_type="premium", is_discount=0, pack_count=1):
     conn = get_conn()
-    conn.execute("INSERT INTO pending_payments (user_id, payment_label, created_at, pack_type) VALUES (?, ?, ?, ?)",
-                 (user_id, label, datetime.now().isoformat(), pack_type))
+    conn.execute(
+        "INSERT INTO pending_payments (user_id, payment_label, pack_type, is_discount, pack_count, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (user_id, label, pack_type, is_discount, pack_count, datetime.now().isoformat())
+    )
     conn.commit()
     conn.close()
-
+    
 def mark_payment_done(payment_label):
     conn = get_conn()
     conn.execute("UPDATE pending_payments SET status = 'done' WHERE payment_label = ?", (payment_label,))
@@ -361,5 +450,136 @@ def get_user_exp(user_id):
 def set_user_level(user_id, level):
     conn = get_conn()
     conn.execute("UPDATE users SET level = ? WHERE user_id = ?", (level, user_id))
+    conn.commit()
+    conn.close()
+
+def get_enemies():
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM enemies").fetchall()
+    conn.close()
+    return rows
+
+def get_user_raid_info(user_id):
+    conn = get_conn()
+    row = conn.execute("SELECT raid_attempts, last_raid_date FROM users WHERE user_id = ?", (user_id,)).fetchone()
+    conn.close()
+    if row:
+        return row["raid_attempts"], row["last_raid_date"]
+    return 3, ""
+
+def use_raid_attempt(user_id):
+    today = datetime.now().strftime("%Y-%m-%d")
+    conn = get_conn()
+    # Сброс попыток, если новый день
+    conn.execute("UPDATE users SET raid_attempts = CASE WHEN last_raid_date != ? THEN 3 ELSE raid_attempts END, last_raid_date = ? WHERE user_id = ?",
+                 (today, today, user_id))
+    conn.commit()
+    conn.close()
+    # Теперь уменьшаем попытки
+    conn = get_conn()
+    conn.execute("UPDATE users SET raid_attempts = raid_attempts - 1 WHERE user_id = ? AND raid_attempts > 0", (user_id,))
+    conn.commit()
+    conn.close()
+
+def add_raid_trophy(user_id):
+    conn = get_conn()
+    conn.execute("INSERT INTO raid_trophies (user_id, quantity) VALUES (?, 1) ON CONFLICT(user_id) DO UPDATE SET quantity = quantity + 1", (user_id,))
+    conn.commit()
+    conn.close()
+
+def get_raid_trophies(user_id):
+    conn = get_conn()
+    row = conn.execute("SELECT quantity FROM raid_trophies WHERE user_id = ?", (user_id,)).fetchone()
+    conn.close()
+    return row["quantity"] if row else 0
+
+def lose_card(user_id, card_id):
+    conn = get_conn()
+    conn.execute("UPDATE user_cards SET quantity = quantity - 1 WHERE user_id = ? AND card_id = ?", (user_id, card_id))
+    conn.execute("DELETE FROM user_cards WHERE user_id = ? AND card_id = ? AND quantity <= 0", (user_id, card_id))
+    conn.commit()
+    conn.close()
+
+# database.py (после всех функций)
+
+def update_activity(user_id):
+    conn = get_conn()
+    conn.execute("UPDATE users SET last_activity_time = ? WHERE user_id = ?",
+                 (datetime.now().isoformat(), user_id))
+    conn.commit()
+    conn.close()
+
+def get_users_for_reminders():
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT user_id, last_activity_time, last_reminder_24_sent, last_reminder_48_sent FROM users"
+    ).fetchall()
+    conn.close()
+    return rows
+
+def set_reminder_sent(user_id, reminder_type):
+    now = datetime.now().isoformat()
+    conn = get_conn()
+    if reminder_type == "24":
+        conn.execute("UPDATE users SET last_reminder_24_sent = ? WHERE user_id = ?", (now, user_id))
+    elif reminder_type == "48":
+        conn.execute("UPDATE users SET last_reminder_48_sent = ? WHERE user_id = ?", (now, user_id))
+    conn.commit()
+    conn.close()
+    
+def get_pending_old_payments(minutes=15):
+    conn = get_conn()
+    threshold = datetime.now() - timedelta(minutes=minutes)
+    rows = conn.execute(
+        "SELECT * FROM pending_payments WHERE status='pending' AND discount_sent=0 AND is_discount=0 AND created_at < ?",
+        (threshold.isoformat(),)
+    ).fetchall()
+    conn.close()
+    return rows
+
+def expire_payment(label):
+    conn = get_conn()
+    conn.execute("UPDATE pending_payments SET status='expired', discount_sent=1 WHERE payment_label=?", (label,))
+    conn.commit()
+    conn.close()
+
+def get_pending_old_payments(minutes=15):
+    conn = get_conn()
+    threshold = datetime.now() - timedelta(minutes=minutes)
+    rows = conn.execute(
+        "SELECT * FROM pending_payments WHERE status='pending' AND discount_sent=0 AND is_discount=0 AND created_at < ?",
+        (threshold.isoformat(),)
+    ).fetchall()
+    conn.close()
+    return rows
+
+def expire_payment(label):
+    conn = get_conn()
+    conn.execute("UPDATE pending_payments SET status='expired', discount_sent=1 WHERE payment_label=?", (label,))
+    conn.commit()
+    conn.close()
+
+def get_all_products():
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM products ORDER BY pack_type, pack_count").fetchall()
+    conn.close()
+    return rows
+
+def get_product(product_id):
+    conn = get_conn()
+    print(product_id + "data")
+    row = conn.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
+    conn.close()
+    return row
+
+def get_last_discount_time(user_id):
+    conn = get_conn()
+    row = conn.execute("SELECT last_discount_time FROM users WHERE user_id = ?", (user_id,)).fetchone()
+    conn.close()
+    return row["last_discount_time"] if row else None
+
+def set_last_discount_time(user_id, dt_str):
+    conn = get_conn()
+    conn.execute("UPDATE users SET last_discount_time = ? WHERE user_id = ?", (dt_str, user_id))
     conn.commit()
     conn.close()

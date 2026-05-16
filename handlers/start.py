@@ -19,8 +19,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Основное меню
     keyboard = [
         ["🆓 Ежедневный пак", "📦 Коллекция", "🔨 Крафт"],
-        ["🃏 Стандартный пак", "💎 Премиум пак", "⚔️ Сюжетка"],
-        ["👤 Профиль"]
+        ["💎 Премиум пак", "⚔️ Сюжетка"],
+        ["👤 Профиль", "🌪️ Облава"]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 

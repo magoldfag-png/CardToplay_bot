@@ -228,11 +228,16 @@ async def collection_rarity_back(update: Update, context: ContextTypes.DEFAULT_T
     await query.answer()
     user_id = query.from_user.id
     collection_state.pop(user_id, None)  # очищаем состояние
+
+    # Получаем текст и клавиатуру со списком редкостей
     text, markup = await build_rarity_keyboard(user_id)
+    
     if text is None:
+        # Если коллекция опустела, удаляем фото и шлём сообщение
         await query.message.delete()
         await context.bot.send_message(chat_id=user_id, text="Тайник опустел, малой.")
         return
-    # Удаляем текущее сообщение (скорее всего, фото) и отправляем новое текстовое
+    
+    # Удаляем старое фото-сообщение и отправляем новое текстовое
     await query.message.delete()
     await context.bot.send_message(chat_id=user_id, text=text, reply_markup=markup)
