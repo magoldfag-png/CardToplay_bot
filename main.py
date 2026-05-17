@@ -1,4 +1,3 @@
-#version 2.0
 import subprocess
 import sys
 
@@ -37,7 +36,7 @@ from telegram import Update
 from database import update_activity
 from handlers.profile import profile_command
 from handlers.start import start, open_welcome_pack
-from handlers.admin import approve, init_products
+from handlers.admin import admin_reset_market, admin_reset_purchase, approve, init_products
 from handlers.craft import craft_menu, craft_card_menu, craft_card, craft_buy_pack, craft_menu_back
 import logging
 from telegram.ext import Application
@@ -46,6 +45,8 @@ from database import sync_cards_from_json
 from handlers.premium import check_payment_and_deliver
 from handlers.admin import approve, force_welcome, reset_welcome, set_artifact, reset_levels  # admin.py дополнить
 from handlers.reminders import send_reminders, reminder_daily_pack
+from handlers.market import (market_button, sell_menu, sell_item_handler,
+                             buy_menu, buy_card_handler, market_back)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -91,6 +92,8 @@ def main():
     app.add_handler(CallbackQueryHandler(show_product, pattern='^shop_product_'))
     app.add_handler(CallbackQueryHandler(buy_product, pattern='^shop_buy_'))
     app.add_handler(CallbackQueryHandler(shop_back, pattern='^shop_back$'))
+    app.add_handler(CommandHandler("reset_market", admin_reset_market))
+    app.add_handler(CommandHandler("reset_purchase", admin_reset_purchase))
     # Кнопки главного меню (ReplyKeyboard)
     app.add_handler(MessageHandler(filters.Regex("^🆓 Ежедневный пак$"), daily_pack_button))
     app.add_handler(MessageHandler(filters.Regex("^📦 Коллекция$"), collection_button))
@@ -104,7 +107,13 @@ def main():
     # Callback-запросы
     app.add_handler(CommandHandler("init_products", init_products))
     app.add_handler(CallbackQueryHandler(collection_rarity_back, pattern="^coll_rarity_back$"))
-
+    app.add_handler(MessageHandler(filters.Regex("^💰 Рынок$"), market_button))
+    app.add_handler(CallbackQueryHandler(sell_menu, pattern="^market_sell_menu$"))
+    app.add_handler(CallbackQueryHandler(sell_item_handler, pattern="^market_sell_artifact$"))
+    app.add_handler(CallbackQueryHandler(sell_item_handler, pattern="^market_sell_trophy$"))
+    app.add_handler(CallbackQueryHandler(buy_menu, pattern="^market_buy_menu$"))
+    app.add_handler(CallbackQueryHandler(buy_card_handler, pattern=r"^market_buy_\d+$"))
+    app.add_handler(CallbackQueryHandler(market_back, pattern="^market_back$"))
     app.add_handler(CallbackQueryHandler(handle_pack_navigation, pattern="^nav_pack_"))
     app.add_handler(CallbackQueryHandler(handle_collection_navigation, pattern="^coll_nav_"))
     app.add_handler(CallbackQueryHandler(handle_collection_spray_all, pattern="^coll_sprayall_"))
@@ -143,11 +152,10 @@ async def main_menu_callback(update, context):
     await query.answer()
     # Удаляем клавиатуру и возвращаем к обычной клавиатуре
     await query.delete_message()
-    # Отправляем короткое сообщение с главным меню
     keyboard = [
         ["🆓 Ежедневный пак", "📦 Коллекция", "🔨 Крафт"],
         ["💎 Премиум пак", "⚔️ Сюжетка"],
-        ["👤 Профиль", "🌪️ Облава"]
+        ["👤 Профиль", "🌪️ Облава", "💰 Рынок"]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await context.bot.send_message(chat_id=query.from_user.id, text="Барыга снова в деле. Выбирай.", reply_markup=reply_markup)

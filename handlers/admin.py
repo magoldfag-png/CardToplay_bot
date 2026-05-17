@@ -5,6 +5,7 @@ from handlers.daily_pack import generate_standard_cards, weighted_choice, user_p
 from database import add_user_card, get_card_info, get_conn
 import random
 from database import set_artifacts, reset_levels as db_reset_levels
+from database import reset_market, reset_purchase_timer
 
 async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /approve <user_id> — только для админов."""
@@ -173,3 +174,20 @@ async def init_products(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.commit()
     conn.close()
     await update.message.reply_text("Таблица продуктов заполнена.")
+
+async def admin_reset_market(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    reset_market()
+    await update.message.reply_text("Рынок сброшен, завтра сгенерится новый.")
+
+async def admin_reset_purchase(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    try:
+        target_id = int(context.args[0])
+    except:
+        await update.message.reply_text("Использование: /reset_purchase <user_id>")
+        return
+    reset_purchase_timer(target_id)
+    await update.message.reply_text(f"Таймер покупки для {target_id} сброшен.")

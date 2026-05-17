@@ -105,6 +105,20 @@ def init_db():
                     exp INTEGER DEFAULT 0,
                     level INTEGER DEFAULT 1
                 )''')
+    # Внутри init_db после создания users:
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN last_card_purchase_time TEXT")
+    except sqlite3.OperationalError:
+        pass
+
+# Пересоздаём таблицу с правильным ключом
+    c.execute("DROP TABLE IF EXISTS daily_market")
+    c.execute('''CREATE TABLE daily_market (
+                    date TEXT,
+                    card_id INTEGER,
+                    price INTEGER,
+                    PRIMARY KEY (date, card_id)
+                )''')
     c.execute('''CREATE TABLE IF NOT EXISTS user_artifacts (
                     user_id INTEGER PRIMARY KEY,
                     quantity INTEGER DEFAULT 0
@@ -581,5 +595,115 @@ def get_last_discount_time(user_id):
 def set_last_discount_time(user_id, dt_str):
     conn = get_conn()
     conn.execute("UPDATE users SET last_discount_time = ? WHERE user_id = ?", (dt_str, user_id))
+    conn.commit()
+    conn.close()
+
+# ------------------ Рынок -------------------
+
+def get_artifacts_count(user_id):
+    return get_artifacts(user_id)  # уже есть
+
+def get_trophies_count(user_id):
+    return get_raid_trophies(user_id)  # уже есть
+
+def sell_item(user_id, item_type):
+    """Продаёт 1 единицу артефакта или трофея, возвращает количество монет или None при ошибке."""
+    conn = get_conn()
+    if item_type == "artifact":
+        cur = conn.execute("SELECT quantity FROM user_artifacts WHERE user_id = ?", (user_id,)).fetchone()
+        if not cur or cur["quantity"] < 1:
+            conn.close()
+            return None
+        conn.execute("UPDATE user_artifacts SET quantity = quantity - 1 WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM user_artifacts WHERE user_id = ? AND quantity <= 0", (user_id,))
+        price = 50
+    elif item_type == "trophy":
+        cur = conn.execute("SELECT quantity FROM raid_trophies WHERE user_id = ?", (user_id,)).fetchone()
+        if not cur or cur["quantity"] < 1:
+            conn.close()
+            return None
+        conn.execute("UPDATE raid_trophies SET quantity = quantity - 1 WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM raid_trophies WHERE user_id = ? AND quantity <= 0", (user_id,))
+        price = 150
+    else:
+        conn.close()
+        return None
+    conn.execute("UPDATE users SET coins = coins + ? WHERE user_id = ?", (price, user_id))
+    conn.commit()
+    conn.close()
+    return price
+
+def generate_daily_market(date_str):
+    import random
+    conn = get_conn()
+    c = conn.cursor()
+    # Удаляем прошлые записи для этой даты
+    c.execute("DELETE FROM daily_market WHERE date = ?", (date_str,))
+    rarities = ["epic", "legendary", "mythic"]
+    weights = [60, 30, 10]
+    chosen_ids = set()
+    for _ in range(5):
+        while True:
+            rarity = random.choices(rarities, weights=weights, k=1)[0]
+            row = conn.execute(
+                "SELECT id FROM cards WHERE rarity = ? AND id != 99 ORDER BY RANDOM() LIMIT 1",
+                (rarity,)
+            ).fetchone()
+            if row and row["id"] not in chosen_ids:
+                chosen_ids.add(row["id"])
+                price = {"epic": 100, "legendary": 500, "mythic": 4000}[rarity]
+                c.execute("INSERT INTO daily_market (date, card_id, price) VALUES (?, ?, ?)",
+                          (date_str, row["id"], price))
+                break
+    conn.commit()
+    conn.close()
+
+def get_daily_market(date_str):
+    conn = get_conn()
+    rows = conn.execute("SELECT card_id, price FROM daily_market WHERE date = ?", (date_str,)).fetchall()
+    conn.close()
+    if not rows:
+        return None
+    return rows
+
+def get_last_card_purchase_time(user_id):
+    conn = get_conn()
+    row = conn.execute("SELECT last_card_purchase_time FROM users WHERE user_id = ?", (user_id,)).fetchone()
+    conn.close()
+    return row["last_card_purchase_time"] if row else None
+
+def set_last_card_purchase_time(user_id, dt_str):
+    conn = get_conn()
+    conn.execute("UPDATE users SET last_card_purchase_time = ? WHERE user_id = ?", (dt_str, user_id))
+    conn.commit()
+    conn.close()
+
+def buy_card_market(user_id, card_id, price):
+    """Покупка карты с рынка: проверка баланса, списание, выдача, обновление времени. Возвращает True при успехе."""
+    conn = get_conn()
+    # Проверка баланса
+    user = conn.execute("SELECT coins FROM users WHERE user_id = ?", (user_id,)).fetchone()
+    if not user or user["coins"] < price:
+        conn.close()
+        return False
+    # Списываем монеты
+    conn.execute("UPDATE users SET coins = coins - ? WHERE user_id = ?", (price, user_id))
+    # Выдаём карту
+    conn.execute("INSERT INTO user_cards (user_id, card_id, quantity) VALUES (?, ?, 1) ON CONFLICT(user_id, card_id) DO UPDATE SET quantity = quantity + 1", (user_id, card_id))
+    # Обновляем время покупки
+    conn.execute("UPDATE users SET last_card_purchase_time = ? WHERE user_id = ?", (datetime.now().isoformat(), user_id))
+    conn.commit()
+    conn.close()
+    return True
+
+def reset_market():
+    conn = get_conn()
+    conn.execute("DELETE FROM daily_market")
+    conn.commit()
+    conn.close()
+
+def reset_purchase_timer(user_id):
+    conn = get_conn()
+    conn.execute("UPDATE users SET last_card_purchase_time = NULL WHERE user_id = ?", (user_id,))
     conn.commit()
     conn.close()

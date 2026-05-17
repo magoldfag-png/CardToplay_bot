@@ -20,7 +20,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         ["🆓 Ежедневный пак", "📦 Коллекция", "🔨 Крафт"],
         ["💎 Премиум пак", "⚔️ Сюжетка"],
-        ["👤 Профиль", "🌪️ Облава"]
+        ["👤 Профиль", "🌪️ Облава", "💰 Рынок"]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -39,11 +39,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Если первый заход – показываем легендарку с кнопкой
     if welcome_bonus_given:
-        card = get_card_info(16)
+        card = get_card_info(23)
         if card:
             img = generate_card_image(card)
             img.seek(0)
-            caption = "Барыга: «Держи легендарную карту, малой! А теперь открой свой приветственный пакет.»"
+            caption = "Барыга: «Держи легендарную карту, малой! Сколько еще похотливых девиц тебя ждут? Сложно представить. Держи пак карточек за мой счет, может там одна из таких девиц?)»"
             keyboard = [[InlineKeyboardButton("🎁 Открыть стандартный пак", callback_data="open_welcome_pack")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_photo(photo=img, caption=caption, reply_markup=reply_markup)
